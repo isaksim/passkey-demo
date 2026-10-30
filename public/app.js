@@ -12,15 +12,15 @@ function showDashboard(userData) {
   card.innerHTML = `
     <div style="text-align: center; padding: 1rem 0;">
       <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
-      <h1 style="color: #4ade80; margin-bottom: 0.5rem;">Authenticated!</h1>
-      <p style="color: #94a3b8; font-size: 1rem;">Welcome, <strong style="color: #fff;">${userData.username}</strong>.</p>
+      <h1 style="color: #16a34a; margin-bottom: 0.5rem;">Authenticated!</h1>
+      <p style="color: #475569; font-size: 1rem;">Welcome, <strong style="color: #0f172a;">${userData.username}</strong>.</p>
 
-      <div style="background: #0f172a; padding: 1rem; border-radius: 8px; margin: 1.5rem 0; text-align: left; font-size: 0.85rem; border: 1px solid #334155;">
-        <p style="margin: 0 0 0.5rem 0; color: #38bdf8; font-weight: bold;">Server Verified Session Data:</p>
-        <p style="margin: 0.25rem 0; color: #cbd5e1;">✓ Credential Type: <strong>${userData.authMethod}</strong></p>
-        <p style="margin: 0.25rem 0; color: #cbd5e1;">✓ Total Payload Transferred: <strong>${userData.totalPayloadBytes} bytes</strong> (Signature)</p>
-        <p style="margin: 0.25rem 0; color: #cbd5e1;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${userData.verifiedRPID})</strong></p>
-        <p style="margin: 0.25rem 0; color: #4ade80;">✓ Password / Shared Secret Sent: <strong>${userData.passwordBytesSent} bytes</strong></p>
+      <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin: 1.5rem 0; text-align: left; font-size: 0.85rem; border: 1px solid #e2e8f0;">
+        <p style="margin: 0 0 0.5rem 0; color: #0284c7; font-weight: bold;">Server Verified Session Data:</p>
+        <p style="margin: 0.25rem 0; color: #334155;">✓ Credential Type: <strong>${userData.authMethod}</strong></p>
+        <p style="margin: 0.25rem 0; color: #334155;">✓ Total Payload Transferred: <strong>${userData.totalPayloadBytes} bytes</strong> (Signature)</p>
+        <p style="margin: 0.25rem 0; color: #334155;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${userData.verifiedRPID})</strong></p>
+        <p style="margin: 0.25rem 0; color: #16a34a;">✓ Password / Shared Secret Sent: <strong>${userData.passwordBytesSent} bytes</strong></p>
       </div>
 
       <button class="btn btn-secondary" onclick="window.location.reload()">Sign Out</button>

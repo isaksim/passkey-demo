@@ -7,8 +7,8 @@
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
+      background: #f8fafc;
+      color: #0f172a;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -16,24 +16,25 @@
       margin: 0;
     }
     .card {
-      background: #1e293b;
+      background: #ffffff;
       padding: 2.5rem;
       border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+      border: 1px solid #e2e8f0;
       width: 100%;
       max-width: 400px;
     }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; text-align: center; color: #38bdf8; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; text-align: center; color: #0284c7; }
     p.subtitle { text-align: center; color: #64748b; font-size: 0.875rem; margin-bottom: 2rem; }
     .form-group { margin-bottom: 1.25rem; }
-    label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: #94a3b8; }
+    label { display: block; margin-bottom: 0.5rem; font-size: 0.875rem; color: #475569; }
     input {
       width: 100%;
       padding: 0.75rem;
       border-radius: 6px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #fff;
+      border: 1px solid #cbd5e1;
+      background: #f1f5f9;
+      color: #0f172a;
       font-size: 1rem;
       box-sizing: border-box;
     }
@@ -49,9 +50,9 @@
     }
     .btn-passkey { background: #0284c7; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .btn-passkey:hover { background: #0369a1; }
-    .btn-secondary { background: #334155; color: #f8fafc; }
-    .btn-secondary:hover { background: #475569; }
-    .divider { text-align: center; color: #475569; font-size: 0.75rem; margin: 1rem 0; font-weight: bold; text-transform: uppercase; }
+    .btn-secondary { background: #e2e8f0; color: #334155; }
+    .btn-secondary:hover { background: #cbd5e1; }
+    .divider { text-align: center; color: #94a3b8; font-size: 0.75rem; margin: 1rem 0; font-weight: bold; text-transform: uppercase; }
     #status {
       margin-top: 1.25rem;
       padding: 0.75rem;
@@ -60,9 +61,9 @@
       text-align: center;
       display: none;
     }
-    .status-info { background: #0369a122; color: #38bdf8; border: 1px solid #0284c744; }
-    .status-success { background: #15803d22; color: #4ade80; border: 1px solid #22c55e44; }
-    .status-error { background: #991b1b22; color: #f87171; border: 1px solid #ef444444; }
+    .status-info { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .status-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .status-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
   </style>
   <script src="https://unpkg.com/@simplewebauthn/browser@9.0.1/dist/bundle/index.umd.min.js"></script>
 </head>
