@@ -14,27 +14,27 @@ const RP_NAME = 'Passkey Demo';
 const RP_ID = 'localhost';
 const ORIGIN = 'http://localhost:3000';
 
-// Global in-memory storage for the demo
+// Global in-memory storage for presentation demo
 const users = {};        // username -> { id, passkeys: [] }
 const passkeyStore = {}; // credentialID -> { username, publicKey, counter }
 const challenges = {};   // challenge store
 
-// ANSI-color codes for Light Mode
-// High-contrast ANSI colors optimized for Light Mode terminal themes
+// High-contrast colors with a bold neon-green twist optimized for Light Mode & Projectors
 const C = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
-  border: '\x1b[36m',        // Dark cyan for separator lines
-  header: '\x1b[1;\x1b[34m',  // Bold Dark Blue for titles (high contrast, zero fade)
-  detail: '\x1b[33m',        // Dark orange/brown for technical details
-  success: '\x1b[1;\x1b[38;5;34m',// Dark green/bold for success messages
-  error: '\x1b[1;\x1b[31m'   // Dark red/bold for error messages
+  border: '\x1b[1;\x1b[34m',          // Bold Dark Blue for heavy frame borders
+  header: '\x1b[1;\x1b[34m',          // Bold Dark Blue for titles
+  detail: '\x1b[1;\x1b[30m',          // Bold Black for technical subheaders
+  success: '\x1b[1;\x1b[38;5;34m',    // High-saturation Vivid Emerald/Neon Green
+  error: '\x1b[1;\x1b[31m'            // Bold Dark Red for errors
 };
 
+const line = '═'.repeat(95);
 function logHeader(step, title) {
-  console.log(`\n${C.border}===========================================================================================${C.reset}`);
+  console.log(`\n${C.border}${line}${C.reset}`);
   console.log(`${C.header}[SERVER LOG] STEP ${step}: ${title}${C.reset}`);
-  console.log(`${C.border}===========================================================================================${C.reset}`);
+  console.log(`${C.border}${line}${C.reset}`);
 }
 
 // --- 1. REGISTRATION START ---
@@ -61,7 +61,7 @@ app.post('/api/register-start', async (req, res) => {
 
   challenges[username] = options.challenge;
 
-  console.log('  [TECHNICAL DETAIL] Generated Public Key Creation Options:');
+  console.log(`  ${C.detail}[TECHNICAL DETAIL] Generated Public Key Creation Options:${C.reset}`);
   console.log(`  ├── Cryptographic Challenge (Random Nonce): ${options.challenge}`);
   console.log(`  ├── Relying Party ID (Origin Domain): ${options.rp.id}`);
   console.log(`  └── Resident Key Requirement: REQUIRED (Enables username-less login)`);
@@ -79,7 +79,7 @@ app.post('/api/register-finish', async (req, res) => {
 
   const clientData = JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8'));
 
-  console.log('  [TECHNICAL DETAIL] Decoded Client Data JSON from Client:');
+  console.log(`  ${C.detail}[TECHNICAL DETAIL] Decoded Client Data JSON from Client:${C.reset}`);
   console.log(`  ├── Type: ${clientData.type}`);
   console.log(`  ├── Challenge Match: ${clientData.challenge === challenges[username] ? 'MATCHED ✓' : 'FAILED ✗'}`);
   console.log(`  └── Origin: ${clientData.origin}`);
@@ -108,6 +108,7 @@ app.post('/api/register-finish', async (req, res) => {
     console.log(`  ├── Credential ID: ${credential.id}`);
     console.log(`  ├── Asymmetric Public Key Size: ${credential.publicKey.length} bytes`);
     console.log(`${C.success}  └── [SECURITY GUARANTEE] The Private Key never left the user hardware/password manager!${C.reset}`);
+
     return res.json({ status: 'ok' });
   }
 
@@ -125,7 +126,7 @@ app.post('/api/login-start', async (req, res) => {
 
   challenges['global_auth'] = options.challenge;
 
-  console.log('  [TECHNICAL DETAIL] Generated Authentication Request Options:');
+  console.log(`  ${C.detail}[TECHNICAL DETAIL] Generated Authentication Request Options:${C.reset}`);
   console.log(`  ├── Cryptographic Challenge: ${options.challenge}`);
   console.log(`  └── Allowed Credentials: [EMPTY] (Requesting authenticator to list local passkeys)`);
 
@@ -140,7 +141,7 @@ app.post('/api/login-finish', async (req, res) => {
   const rawBodyString = JSON.stringify(req.body);
   const payloadSizeBytes = Buffer.byteLength(rawBodyString);
 
-  // Dynamisk beregning av passord-bytes
+  // Dynamic payload inspection to verify zero password bytes sent
   const sensitiveKeys = ['password', 'pass', 'secret', 'pwd', 'authToken'];
   let detectedPasswordBytes = 0;
   sensitiveKeys.forEach((key) => {
@@ -152,7 +153,7 @@ app.post('/api/login-finish', async (req, res) => {
   const passkey = passkeyStore[response.id];
 
   if (!passkey) {
-    console.log('\x1b[31m%s\x1b[0m', '  └── [ERROR] Unknown Credential ID. Passkey not found in server DB.');
+    console.log(`${C.error}  └── [ERROR] Unknown Credential ID. Passkey not found in server DB.${C.reset}`);
     return res.status(400).json({ error: 'Unknown credential. Please register first.' });
   }
 
@@ -183,11 +184,12 @@ app.post('/api/login-finish', async (req, res) => {
     console.log(`  ├── Total Network Payload Received: ${payloadSizeBytes} bytes`);
     console.log(`  ├── Password/Secret Keys Detected: ${detectedPasswordBytes} bytes`);
     console.log(`${C.success}  └── [SUCCESS] User "${passkey.username.toUpperCase()}" authenticated via Public Key Cryptography!${C.reset}`);
+
     return res.json({
       status: 'ok',
       user: {
         username: passkey.username,
-        authMethod: response.type, // 'public-key'
+        authMethod: response.type,
         totalPayloadBytes: payloadSizeBytes,
         passwordBytesSent: detectedPasswordBytes,
         verifiedRPID: authenticationInfo.rpID || RP_ID,
@@ -202,7 +204,7 @@ app.post('/api/login-finish', async (req, res) => {
 
 app.listen(3000, () => {
   console.clear();
-  console.log(`${C.success}==========================================================================================${C.reset}`);
-  console.log(`${C.success} PASSKEY DEMO RUNNING AT http://localhost:3000`);
-  console.log(`${C.success}==========================================================================================${C.reset}\n`);
+  console.log(`${C.border}${line}${C.reset}`);
+  console.log(`${C.success} PASSKEY DEMO RUNNING AT http://localhost:3000${C.reset}`);
+  console.log(`${C.border}${line}${C.reset}\n`);
 });
