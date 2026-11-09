@@ -20,7 +20,6 @@ function showDashboard(userData) {
         <p style="margin: 0.25rem 0; color: #334155;">✓ Credential Type: <strong>${userData.authMethod}</strong></p>
         <p style="margin: 0.25rem 0; color: #334155;">✓ Total Payload Transferred: <strong>${userData.totalPayloadBytes} bytes</strong> (Signature)</p>
         <p style="margin: 0.25rem 0; color: #334155;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${userData.verifiedRPID})</strong></p>
-        <p style="margin: 0.25rem 0; color: #16a34a;">✓ Password / Shared Secret Sent: <strong>${userData.passwordBytesSent} bytes</strong></p>
       </div>
 
       <button class="btn btn-secondary" onclick="window.location.reload()">Sign Out</button>

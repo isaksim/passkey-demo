@@ -23,6 +23,8 @@ const challenges = {};   // challenge store
 const C = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
+  register: '\x1b[1;\x1b[38;5;129m',  // Bold Electric Neon Purple/Magenta (#AF00FF)
+  login:    '\x1b[1;\x1b[38;5;33m',  // Bold Electric Cyan/Blue (#0087FF)
   border: '\x1b[1;\x1b[34m',          // Bold Dark Blue for heavy frame borders
   header: '\x1b[1;\x1b[34m',          // Bold Dark Blue for titles
   detail: '\x1b[1;\x1b[30m',          // Bold Black for technical subheaders
@@ -31,16 +33,16 @@ const C = {
 };
 
 const line = '═'.repeat(95);
-function logHeader(step, title) {
+function logHeader(step, title, color = C.header) {
   console.log(`\n${C.border}${line}${C.reset}`);
-  console.log(`${C.header}[SERVER LOG] STEP ${step}: ${title}${C.reset}`);
+  console.log(`${color}[SERVER LOG] STEP ${step}: ${title}${C.reset}`);
   console.log(`${C.border}${line}${C.reset}`);
 }
 
 // --- 1. REGISTRATION START ---
 app.post('/api/register-start', async (req, res) => {
   const { username } = req.body;
-  logHeader(1, `[REGISTER] INITIATING PASSKEY REGISTRATION FOR USER: "${username.toUpperCase()}"`);
+  logHeader(1, `[REGISTER] INITIATING PASSKEY REGISTRATION FOR USER: "${username}"`, C.register);
 
   if (!users[username]) {
     users[username] = { id: username, passkeys: [] };
@@ -72,7 +74,7 @@ app.post('/api/register-start', async (req, res) => {
 // --- 2. REGISTRATION FINISH ---
 app.post('/api/register-finish', async (req, res) => {
   const { username, response } = req.body;
-  logHeader(2, `[REGISTER] VERIFYING ATTESTATION STATEMENT FOR USER: "${username.toUpperCase()}"`);
+  logHeader(2, `[REGISTER] VERIFYING ATTESTATION STATEMENT FOR USER: "${username.toUpperCase()}"`, C.register);
 
   const user = users[username];
   if (!user) return res.status(400).json({ error: 'User session not found' });
@@ -104,10 +106,10 @@ app.post('/api/register-finish', async (req, res) => {
     user.passkeys.push(passkeyData);
     passkeyStore[credential.id] = passkeyData;
 
-    logHeader(3, `[REGISTER] REGISTRATION SUCCESSFUL - PUBLIC KEY STORED`);
+    logHeader(3, `[REGISTER] REGISTRATION SUCCESSFUL - PUBLIC KEY STORED`, C.register);
     console.log(`  ├── Credential ID: ${credential.id}`);
     console.log(`  ├── Asymmetric Public Key Size: ${credential.publicKey.length} bytes`);
-    console.log(`${C.success}  └── [SECURITY GUARANTEE] The Private Key never left the user hardware/password manager!${C.reset}`);
+    console.log(`${C.success}  └── [SUCCESS] Public key stored${C.reset}`);
 
     return res.json({ status: 'ok' });
   }
@@ -117,7 +119,7 @@ app.post('/api/register-finish', async (req, res) => {
 
 // --- 3. LOGIN START (USERNAME-LESS / DISCOVERABLE) ---
 app.post('/api/login-start', async (req, res) => {
-  logHeader(1, `[LOGIN] INITIATING USERNAME-LESS AUTHENTICATION REQUEST`);
+  logHeader(1, `[LOGIN] INITIATING AUTHENTICATION REQUEST`, C.login);
 
   const options = await generateAuthenticationOptions({
     rpID: RP_ID,
@@ -136,19 +138,10 @@ app.post('/api/login-start', async (req, res) => {
 // --- 4. LOGIN FINISH ---
 app.post('/api/login-finish', async (req, res) => {
   const { response } = req.body;
-  logHeader(2, `[LOGIN] VERIFYING SIGNATURE FROM CREDENTIAL ID: ${response.id}`);
+  logHeader(2, `[LOGIN] VERIFYING SIGNATURE FROM CREDENTIAL ID: ${response.id}`, C.login);
 
   const rawBodyString = JSON.stringify(req.body);
   const payloadSizeBytes = Buffer.byteLength(rawBodyString);
-
-  // Dynamic payload inspection to verify zero password bytes sent
-  const sensitiveKeys = ['password', 'pass', 'secret', 'pwd', 'authToken'];
-  let detectedPasswordBytes = 0;
-  sensitiveKeys.forEach((key) => {
-    if (req.body[key]) {
-      detectedPasswordBytes += Buffer.byteLength(String(req.body[key]));
-    }
-  });
 
   const passkey = passkeyStore[response.id];
 
@@ -180,10 +173,9 @@ app.post('/api/login-finish', async (req, res) => {
     const { authenticationInfo } = verification;
     passkey.counter = authenticationInfo.newCounter;
 
-    logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`);
+    logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`, C.login);
     console.log(`  ├── Total Network Payload Received: ${payloadSizeBytes} bytes`);
-    console.log(`  ├── Password/Secret Keys Detected: ${detectedPasswordBytes} bytes`);
-    console.log(`${C.success}  └── [SUCCESS] User "${passkey.username.toUpperCase()}" authenticated via Public Key Cryptography!${C.reset}`);
+    console.log(`${C.success}  └── [SUCCESS] User "${passkey.username.toUpperCase()}" authenticated via Public Key Cryptography${C.reset}`);
 
     return res.json({
       status: 'ok',
@@ -191,7 +183,6 @@ app.post('/api/login-finish', async (req, res) => {
         username: passkey.username,
         authMethod: response.type,
         totalPayloadBytes: payloadSizeBytes,
-        passwordBytesSent: detectedPasswordBytes,
         verifiedRPID: authenticationInfo.rpID || RP_ID,
         verifiedOrigin: authenticationInfo.origin || ORIGIN,
         phishingProtected: verification.verified
