@@ -74,7 +74,7 @@ app.post('/api/register-start', async (req, res) => {
 // --- 2. REGISTRATION FINISH ---
 app.post('/api/register-finish', async (req, res) => {
   const { username, response } = req.body;
-  logHeader(2, `[REGISTER] VERIFYING ATTESTATION STATEMENT FOR USER: "${username.toUpperCase()}"`, C.register);
+  logHeader(2, `[REGISTER] VERIFYING ATTESTATION STATEMENT FOR USER: "${username}"`, C.register);
 
   const user = users[username];
   if (!user) return res.status(400).json({ error: 'User session not found' });
@@ -175,7 +175,7 @@ app.post('/api/login-finish', async (req, res) => {
 
     logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`, C.login);
     console.log(`  ├── Total Network Payload Received: ${payloadSizeBytes} bytes`);
-    console.log(`${C.success}  └── [SUCCESS] User "${passkey.username.toUpperCase()}" authenticated via Public Key Cryptography${C.reset}`);
+    console.log(`${C.success}  └── [SUCCESS] User "${passkey.username}" authenticated via Public Key Cryptography${C.reset}`);
 
     return res.json({
       status: 'ok',
