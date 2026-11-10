@@ -5,7 +5,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse
 } from '@simplewebauthn/server';
-import { COSEALG } from '@simplewebauthn/server/helpers';
+import { COSEALG, cose, decodeCredentialPublicKey } from '@simplewebauthn/server/helpers';
 
 // Run with `node server.js -v` (or `npm run start:verbose`) for the detailed server log
 const VERBOSE = process.argv.includes('-v') || process.argv.includes('--verbose');
@@ -106,7 +106,7 @@ app.post('/api/register-start', async (req, res) => {
     ['User Verification', selection.userVerification ?? 'not set', true],
     ['Attestation Requested', options.attestation, true],
     ['Timeout', `${options.timeout} ms`, true],
-  ]);
+  ], VERBOSE ? "Challenge stored, waiting for the client's response (STEP 2)…" : null);
 
   res.json({ options });
 });
@@ -134,7 +134,7 @@ app.post('/api/register-finish', async (req, res) => {
   logDetail('Decoded Client Data JSON from Client:');
   logTree([
     ['Type', clientData.type, true],
-    ['Challenge Match', matchLabel(clientData.challenge, expectedChallenge)],
+    ['Challenge (client data vs. issued)', matchLabel(clientData.challenge, expectedChallenge)],
     ['Origin', `${clientData.origin} — ${matchLabel(clientData.origin, ORIGIN)}`],
   ]);
 
@@ -173,9 +173,13 @@ app.post('/api/register-finish', async (req, res) => {
 
     logHeader(3, `[REGISTER] REGISTRATION SUCCESSFUL - PUBLIC KEY STORED`, C.register);
     logDetail('Stored Credential:');
+    const publicKeyB64 = Buffer.from(credential.publicKey).toString('base64url');
+
     logTree([
       ['Credential ID', credential.id],
-      ['Asymmetric Public Key Size', `${credential.publicKey.length} bytes (COSE-encoded)`],
+      ['Public Key (as stored)', `${publicKeyB64.slice(0, 32)}…`],
+      ['Fields in Stored Passkey Record', Object.keys(passkeyData).join(', ')],
+      ['Asymmetric Public Key Size', `${credential.publicKey.length} bytes`, true],
       ['Verified Origin / RP ID', `${origin} / ${rpID}`, true],
       ['Attestation Format', fmt === 'none' ? 'none (no attestation statement, authenticator model is not attested)' : fmt, true],
       ['AAGUID', aaguidIsEmpty ? `${aaguid} (authenticator did not identify its model)` : aaguid, true],
@@ -186,7 +190,7 @@ app.post('/api/register-finish', async (req, res) => {
       ['Backed Up', credentialBackedUp ? 'yes' : 'no', true],
       ['Discoverable (resident key)', discoverable === undefined ? 'not reported by browser' : (discoverable ? 'yes' : 'no'), true],
       ['Signature Counter', credential.counter ?? 0, true],
-    ], `${C.success}[SUCCESS] Only the public key is stored on the server${C.reset}`);
+    ], `${C.success}[SUCCESS] Only public data is stored on the server (no password, no private key)${C.reset}`);
 
     return res.json({ status: 'ok' });
   }
@@ -217,7 +221,8 @@ app.post('/api/login-start', async (req, res) => {
       ? '[EMPTY] (Requesting authenticator to list local passkeys)'
       : `${allowed} credential(s) listed`],
     ['Timeout', `${options.timeout} ms`, true],
-  ]);
+    ['Passkeys Registered on This Server', Object.keys(passkeyStore).length, true],
+  ], VERBOSE ? "Challenge stored, waiting for the client's signed response (STEP 2)…" : null);
 
   res.json({ options });
 });
@@ -261,13 +266,13 @@ app.post('/api/login-finish', async (req, res) => {
   logDetail('Decoded Client Data JSON from Client:');
   logTree([
     ['Type', clientData.type, true],
-    ['Challenge Match', matchLabel(clientData.challenge, expectedChallenge)],
+    ['Challenge (client data vs. issued)', matchLabel(clientData.challenge, expectedChallenge)],
     ['Origin', `${clientData.origin} — ${matchLabel(clientData.origin, ORIGIN)}`],
     ['Matched Credential ID to DB User', `"${passkey.username}"`],
     ['User Handle returned by authenticator', userHandle === null
       ? 'none returned'
       : `"${userHandle}" ${userHandle === passkey.username ? '(matches DB user ✓)' : '(does NOT match DB user ✗)'}`, true],
-    ['Stored Public Key', `${passkey.publicKey.length} bytes (COSE-encoded)`, true],
+    ['Stored Public Key', `${passkey.publicKey.length} bytes`, true],
     ['Stored Signature Counter', passkey.counter ?? 0, true],
   ]);
 
@@ -290,7 +295,7 @@ app.post('/api/login-finish', async (req, res) => {
       },
     });
   } catch (err) {
-    logFailure(`Signature verification failed: ${err.message}`);
+    logFailure(`Authentication verification failed: ${err.message}`);
     return res.status(400).json({ error: 'Signature verification failed' });
   }
 
@@ -304,10 +309,14 @@ app.post('/api/login-finish', async (req, res) => {
       : '';
     const { credentialDeviceType } = authenticationInfo;
 
+    // Real value: algorithm read from the stored public key
+    const signatureAlg = decodeCredentialPublicKey(pubKey).get(cose.COSEKEYS.alg);
+
     logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`, C.login);
     logDetail('Verification Result:');
     logTree([
-      ['Total Network Payload Received', `${payloadSizeBytes} bytes`],
+      ['Signature', `VALID ✓ (${COSEALG[signatureAlg] ?? `COSE ${signatureAlg}`}, verified with the stored public key)`],
+      ['Total Network Payload Received', `${payloadSizeBytes} bytes`, true],
       ['Verified Origin / RP ID', `${authenticationInfo.origin} / ${authenticationInfo.rpID}`],
       ['User Verified (UV flag)', authenticationInfo.userVerified ? 'yes' : 'no', true],
       ['Credential Device Type', `${credentialDeviceType}${credentialDeviceType === 'multiDevice' ? ' (can be synced/backed up)' : ''}`, true],
@@ -320,7 +329,7 @@ app.post('/api/login-finish', async (req, res) => {
       user: {
         username: passkey.username,
         authMethod: response.type,
-        totalPayloadBytes: payloadSizeBytes,
+
         verifiedRPID: authenticationInfo.rpID,
         verifiedOrigin: authenticationInfo.origin,
         // The library only reports success if the signed origin and RP ID matched what we expect

@@ -1,14 +1,14 @@
 {
   "name": "passkey-demo",
   "version": "1.0.0",
-  "description": "",
+  "description": "Demo that visualizes the passkey (WebAuthn / FIDO2) registration and login flow with a step-by-step server log",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "start:verbose": "node server.js -v",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": ["passkey", "webauthn", "fido2", "authentication", "demo"],
   "type": "module",
   "dependencies": {
     "@simplewebauthn/browser": "14.0.0",

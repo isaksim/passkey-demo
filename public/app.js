@@ -7,19 +7,28 @@ function setStatus(text, type = 'info') {
   statusEl.textContent = text;
 }
 
+// Escape values before they are placed into innerHTML (the username is user-controlled input)
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function showDashboard(userData) {
   const card = document.querySelector('.card');
   card.innerHTML = `
     <div style="text-align: center; padding: 1rem 0;">
       <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
       <h1 style="color: #16a34a; margin-bottom: 0.5rem;">Authenticated!</h1>
-      <p style="color: #475569; font-size: 1rem;">Welcome, <strong style="color: #0f172a;">${userData.username}</strong>.</p>
+      <p style="color: #475569; font-size: 1rem;">Welcome, <strong style="color: #0f172a;">${escapeHtml(userData.username)}</strong>.</p>
 
       <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin: 1.5rem 0; text-align: left; font-size: 0.85rem; border: 1px solid #e2e8f0;">
         <p style="margin: 0 0 0.5rem 0; color: #0284c7; font-weight: bold;">Server Verified Session Data:</p>
-        <p style="margin: 0.25rem 0; color: #334155;">✓ Credential Type: <strong>${userData.authMethod}</strong></p>
-        <p style="margin: 0.25rem 0; color: #334155;">✓ Total Payload Transferred: <strong>${userData.totalPayloadBytes} bytes</strong> (Signature)</p>
-        <p style="margin: 0.25rem 0; color: #334155;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${userData.verifiedRPID})</strong></p>
+        <p style="margin: 0.25rem 0; color: #334155;">✓ Credential Type: <strong>${escapeHtml(userData.authMethod)}</strong></p>
+        <p style="margin: 0.25rem 0; color: #334155;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${escapeHtml(userData.verifiedRPID)})</strong></p>
       </div>
 
       <button class="btn btn-secondary" onclick="window.location.reload()">Sign Out</button>

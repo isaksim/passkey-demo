@@ -8,8 +8,8 @@ The browser UI lets you register a passkey and sign in with it. Meanwhile, the N
 
 - **Passkey registration** with a username (creates a discoverable credential / resident key).
 - **Username-less sign-in** using discoverable credentials, including conditional UI (autofill) where the browser supports it.
-- **Verbose server logging** that explains each step of the flow in the terminal.
-- A success screen that shows server-verified data (credential type, payload size, RP ID / phishing protection).
+- **Step-by-step server logging** that explains each step of the flow in the terminal, with an optional verbose mode (`-v`) for more detail.
+- A success screen that shows server-verified data (credential type, RP ID / phishing protection).
 
 ## Tech stack
 
@@ -35,7 +35,9 @@ npm install
 npm start
 ```
 
-`npm start` runs `node server.js`.
+`npm start` runs `node server.js`. Then open <http://localhost:3000> in your browser.
+
+> Use `localhost` exactly as shown. The relying party ID (`localhost`) and origin (`http://localhost:3000`) are hard-coded in `server.js`, so accessing the app via `127.0.0.1` or another hostname will make WebAuthn verification fail.
 
 ### Verbose server log
 
@@ -44,11 +46,6 @@ By default the server log shows only the key steps of the flow. For the full tec
 ```bash
 npm run start:verbose   # same as: node server.js -v
 ```
-
-Then open <http://localhost:3000> in your browser.
-
-> Use `localhost` exactly as shown. The relying party ID (`localhost`) and origin (`http://localhost:3000`) are hard-coded in `server.js`, so accessing the app via `127.0.0.1` or another hostname will make WebAuthn verification fail.
-
 
 ## How to use
 
@@ -80,8 +77,7 @@ Then open <http://localhost:3000> in your browser.
 
 This is a demo, not production code:
 
-- Users, passkeys, and challenges are stored **in memory only** and are lost whenever the server restarts. A passkey registered in your browser will no longer be recognized after a restart.
+- Users, passkeys, and challenges are stored **in memory only** and are lost whenever the server restarts. A passkey registered in your browser or password manager will no longer be recognized after a restart (the server logs `Unknown Credential ID`). Delete the old demo passkeys there and register again.
 - The login challenge is a single global value, so concurrent sign-ins are not supported.
 - The RP ID, origin, and port (`3000`) are hard-coded.
-
 - There are no sessions or real authorization. A successful login only renders a confirmation screen.
