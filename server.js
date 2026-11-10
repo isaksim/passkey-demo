@@ -5,10 +5,16 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse
 } from '@simplewebauthn/server';
+import { COSEALG } from '@simplewebauthn/server/helpers';
+
+// Run with `node server.js -v` (or `npm run start:verbose`) for the detailed server log
+const VERBOSE = process.argv.includes('-v') || process.argv.includes('--verbose');
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
+// Serve the browser-side WebAuthn library locally so the demo works offline
+app.use('/vendor/simplewebauthn', express.static('node_modules/@simplewebauthn/browser/dist/bundle'));
 
 const RP_NAME = 'Passkey Demo';
 const RP_ID = 'localhost';
@@ -23,13 +29,13 @@ const challenges = {};   // challenge store
 const C = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
-  register: '\x1b[1;\x1b[38;5;129m',  // Bold Electric Neon Purple/Magenta (#AF00FF)
-  login:    '\x1b[1;\x1b[38;5;33m',  // Bold Electric Cyan/Blue (#0087FF)
-  border: '\x1b[1;\x1b[34m',          // Bold Dark Blue for heavy frame borders
-  header: '\x1b[1;\x1b[34m',          // Bold Dark Blue for titles
-  detail: '\x1b[1;\x1b[30m',          // Bold Black for technical subheaders
-  success: '\x1b[1;\x1b[38;5;34m',    // High-saturation Vivid Emerald/Neon Green
-  error: '\x1b[1;\x1b[31m'            // Bold Dark Red for errors
+  register: '\x1b[1;38;5;129m',  // Bold Electric Neon Purple/Magenta (#AF00FF)
+  login:    '\x1b[1;38;5;33m',   // Bold Electric Cyan/Blue (#0087FF)
+  border: '\x1b[1;34m',          // Bold Dark Blue for heavy frame borders
+  header: '\x1b[1;34m',          // Bold Dark Blue for titles
+  detail: '\x1b[1;30m',          // Bold Black for technical subheaders
+  success: '\x1b[1;38;5;34m',    // High-saturation Vivid Emerald/Neon Green
+  error: '\x1b[1;31m'            // Bold Dark Red for errors
 };
 
 const line = '═'.repeat(95);
@@ -38,6 +44,30 @@ function logHeader(step, title, color = C.header) {
   console.log(`${color}[SERVER LOG] STEP ${step}: ${title}${C.reset}`);
   console.log(`${C.border}${line}${C.reset}`);
 }
+
+// Prints rows as a tree. A row is [label, value] or [label, value, true]; the third form is
+// verbose-only and is skipped unless -v is given. The last row (or `closing`, if given) gets └──.
+function logTree(items, closing = null) {
+  const rows = items.filter(([, , verboseOnly]) => !verboseOnly || VERBOSE);
+  rows.forEach(([label, value], i) => {
+    const isLast = !closing && i === rows.length - 1;
+    console.log(`  ${isLast ? '└──' : '├──'} ${label}: ${value}`);
+  });
+  if (closing) console.log(`  └── ${closing}`);
+}
+
+function logDetail(title) {
+  console.log(`  ${C.detail}[TECHNICAL DETAIL] ${title}${C.reset}`);
+}
+
+function logFailure(message) {
+  console.log(`  ${C.error}✗ [ERROR] ${message}${C.reset}`);
+}
+
+const fromBase64Url = (value) => Buffer.from(value, 'base64url');
+const decodeClientData = (response) =>
+  JSON.parse(fromBase64Url(response.response.clientDataJSON).toString('utf-8'));
+const matchLabel = (actual, expected) => (actual === expected ? 'MATCHED ✓' : `FAILED ✗ (expected ${expected})`);
 
 // --- 1. REGISTRATION START ---
 app.post('/api/register-start', async (req, res) => {
@@ -63,10 +93,20 @@ app.post('/api/register-start', async (req, res) => {
 
   challenges[username] = options.challenge;
 
-  console.log(`  ${C.detail}[TECHNICAL DETAIL] Generated Public Key Creation Options:${C.reset}`);
-  console.log(`  ├── Cryptographic Challenge (Random Nonce): ${options.challenge}`);
-  console.log(`  ├── Relying Party ID (Origin Domain): ${options.rp.id}`);
-  console.log(`  └── Resident Key Requirement: REQUIRED (Enables username-less login)`);
+  const selection = options.authenticatorSelection ?? {};
+
+  logDetail('Generated Public Key Creation Options:');
+  logTree([
+    ['Cryptographic Challenge (Random Nonce)', options.challenge],
+    ['Relying Party ID (Origin Domain)', options.rp.id],
+    ['Relying Party Name', options.rp.name, true],
+    ['User', `${options.user.name} (user handle, base64url: ${options.user.id})`, true],
+    ['Accepted Key Algorithms', options.pubKeyCredParams.map(({ alg }) => COSEALG[alg] ?? `COSE ${alg}`).join(', '), true],
+    ['Resident Key Requirement', `${selection.residentKey ?? 'not set'} (enables username-less login)`],
+    ['User Verification', selection.userVerification ?? 'not set', true],
+    ['Attestation Requested', options.attestation, true],
+    ['Timeout', `${options.timeout} ms`, true],
+  ]);
 
   res.json({ options });
 });
@@ -74,27 +114,48 @@ app.post('/api/register-start', async (req, res) => {
 // --- 2. REGISTRATION FINISH ---
 app.post('/api/register-finish', async (req, res) => {
   const { username, response } = req.body;
-  logHeader(2, `[REGISTER] VERIFYING ATTESTATION STATEMENT FOR USER: "${username}"`, C.register);
+  logHeader(2, `[REGISTER] VERIFYING REGISTRATION RESPONSE FOR USER: "${username}"`, C.register);
 
   const user = users[username];
-  if (!user) return res.status(400).json({ error: 'User session not found' });
+  const expectedChallenge = challenges[username];
+  if (!user || !expectedChallenge) {
+    logFailure('No registration in progress for this user (call register-start first).');
+    return res.status(400).json({ error: 'User session not found' });
+  }
 
-  const clientData = JSON.parse(Buffer.from(response.response.clientDataJSON, 'base64').toString('utf-8'));
+  let clientData;
+  try {
+    clientData = decodeClientData(response);
+  } catch (err) {
+    logFailure(`Could not decode clientDataJSON: ${err.message}`);
+    return res.status(400).json({ error: 'Malformed registration response' });
+  }
 
-  console.log(`  ${C.detail}[TECHNICAL DETAIL] Decoded Client Data JSON from Client:${C.reset}`);
-  console.log(`  ├── Type: ${clientData.type}`);
-  console.log(`  ├── Challenge Match: ${clientData.challenge === challenges[username] ? 'MATCHED ✓' : 'FAILED ✗'}`);
-  console.log(`  └── Origin: ${clientData.origin}`);
+  logDetail('Decoded Client Data JSON from Client:');
+  logTree([
+    ['Type', clientData.type, true],
+    ['Challenge Match', matchLabel(clientData.challenge, expectedChallenge)],
+    ['Origin', `${clientData.origin} — ${matchLabel(clientData.origin, ORIGIN)}`],
+  ]);
 
-  const verification = await verifyRegistrationResponse({
-    response,
-    expectedChallenge: challenges[username],
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
-  });
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+    });
+  } catch (err) {
+    logFailure(`Registration verification failed: ${err.message}`);
+    return res.status(400).json({ error: 'Attestation verification failed' });
+  }
 
   if (verification.verified && verification.registrationInfo) {
-    const { credential } = verification.registrationInfo;
+    const {
+      credential, fmt, aaguid, userVerified,
+      credentialDeviceType, credentialBackedUp, origin, rpID,
+    } = verification.registrationInfo;
 
     const passkeyData = {
       username,
@@ -106,14 +167,31 @@ app.post('/api/register-finish', async (req, res) => {
     user.passkeys.push(passkeyData);
     passkeyStore[credential.id] = passkeyData;
 
+    // Only present because generateRegistrationOptions() requests the credProps extension
+    const discoverable = response.clientExtensionResults?.credProps?.rk;
+    const aaguidIsEmpty = /^[0-]+$/.test(aaguid);
+
     logHeader(3, `[REGISTER] REGISTRATION SUCCESSFUL - PUBLIC KEY STORED`, C.register);
-    console.log(`  ├── Credential ID: ${credential.id}`);
-    console.log(`  ├── Asymmetric Public Key Size: ${credential.publicKey.length} bytes`);
-    console.log(`${C.success}  └── [SUCCESS] Public key stored${C.reset}`);
+    logDetail('Stored Credential:');
+    logTree([
+      ['Credential ID', credential.id],
+      ['Asymmetric Public Key Size', `${credential.publicKey.length} bytes (COSE-encoded)`],
+      ['Verified Origin / RP ID', `${origin} / ${rpID}`, true],
+      ['Attestation Format', fmt === 'none' ? 'none (no attestation statement, authenticator model is not attested)' : fmt, true],
+      ['AAGUID', aaguidIsEmpty ? `${aaguid} (authenticator did not identify its model)` : aaguid, true],
+      ['Authenticator Attachment', response.authenticatorAttachment ?? 'not reported', true],
+      ['Transports', credential.transports?.join(', ') || 'not reported', true],
+      ['User Verified (UV flag)', userVerified ? 'yes' : 'no', true],
+      ['Credential Device Type', `${credentialDeviceType}${credentialDeviceType === 'multiDevice' ? ' (can be synced/backed up)' : ''}`, true],
+      ['Backed Up', credentialBackedUp ? 'yes' : 'no', true],
+      ['Discoverable (resident key)', discoverable === undefined ? 'not reported by browser' : (discoverable ? 'yes' : 'no'), true],
+      ['Signature Counter', credential.counter ?? 0, true],
+    ], `${C.success}[SUCCESS] Only the public key is stored on the server${C.reset}`);
 
     return res.json({ status: 'ok' });
   }
 
+  logFailure('Registration response could not be verified.');
   res.status(400).json({ error: 'Attestation verification failed' });
 });
 
@@ -128,9 +206,18 @@ app.post('/api/login-start', async (req, res) => {
 
   challenges['global_auth'] = options.challenge;
 
-  console.log(`  ${C.detail}[TECHNICAL DETAIL] Generated Authentication Request Options:${C.reset}`);
-  console.log(`  ├── Cryptographic Challenge: ${options.challenge}`);
-  console.log(`  └── Allowed Credentials: [EMPTY] (Requesting authenticator to list local passkeys)`);
+  const allowed = options.allowCredentials?.length ?? 0;
+
+  logDetail('Generated Authentication Request Options:');
+  logTree([
+    ['Cryptographic Challenge', options.challenge],
+    ['Relying Party ID', options.rpId, true],
+    ['User Verification', options.userVerification, true],
+    ['Allowed Credentials', allowed === 0
+      ? '[EMPTY] (Requesting authenticator to list local passkeys)'
+      : `${allowed} credential(s) listed`],
+    ['Timeout', `${options.timeout} ms`, true],
+  ]);
 
   res.json({ options });
 });
@@ -138,44 +225,95 @@ app.post('/api/login-start', async (req, res) => {
 // --- 4. LOGIN FINISH ---
 app.post('/api/login-finish', async (req, res) => {
   const { response } = req.body;
-  logHeader(2, `[LOGIN] VERIFYING SIGNATURE FROM CREDENTIAL ID: ${response.id}`, C.login);
+  logHeader(2, `[LOGIN] VERIFYING SIGNATURE FROM CREDENTIAL ID: ${response?.id}`, C.login);
 
-  const rawBodyString = JSON.stringify(req.body);
-  const payloadSizeBytes = Buffer.byteLength(rawBodyString);
+  if (!response?.id) {
+    logFailure('Request did not contain an authentication response.');
+    return res.status(400).json({ error: 'Malformed authentication response' });
+  }
+
+  // Size of the request body as it came over the wire
+  const payloadSizeBytes =
+    Number(req.headers['content-length']) || Buffer.byteLength(JSON.stringify(req.body));
 
   const passkey = passkeyStore[response.id];
 
   if (!passkey) {
-    console.log(`${C.error}  └── [ERROR] Unknown Credential ID. Passkey not found in server DB.${C.reset}`);
+    logFailure('Unknown Credential ID. Passkey not found in server DB.');
     return res.status(400).json({ error: 'Unknown credential. Please register first.' });
   }
 
-  console.log(`  └── Matched Credential ID to DB User: "${passkey.username}"`);
+  const expectedChallenge = challenges['global_auth'];
+
+  let clientData;
+  try {
+    clientData = decodeClientData(response);
+  } catch (err) {
+    logFailure(`Could not decode clientDataJSON: ${err.message}`);
+    return res.status(400).json({ error: 'Malformed authentication response' });
+  }
+
+  // For discoverable credentials the authenticator returns the user handle we set at registration
+  const userHandle = response.response.userHandle
+    ? fromBase64Url(response.response.userHandle).toString('utf-8')
+    : null;
+
+  logDetail('Decoded Client Data JSON from Client:');
+  logTree([
+    ['Type', clientData.type, true],
+    ['Challenge Match', matchLabel(clientData.challenge, expectedChallenge)],
+    ['Origin', `${clientData.origin} — ${matchLabel(clientData.origin, ORIGIN)}`],
+    ['Matched Credential ID to DB User', `"${passkey.username}"`],
+    ['User Handle returned by authenticator', userHandle === null
+      ? 'none returned'
+      : `"${userHandle}" ${userHandle === passkey.username ? '(matches DB user ✓)' : '(does NOT match DB user ✗)'}`, true],
+    ['Stored Public Key', `${passkey.publicKey.length} bytes (COSE-encoded)`, true],
+    ['Stored Signature Counter', passkey.counter ?? 0, true],
+  ]);
 
   let pubKey = passkey.publicKey;
   if (!(pubKey instanceof Uint8Array) && typeof pubKey === 'object') {
     pubKey = new Uint8Array(Object.values(pubKey));
   }
 
-  const verification = await verifyAuthenticationResponse({
-    response,
-    expectedChallenge: challenges['global_auth'],
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
-    credential: {
-      id: passkey.id,
-      publicKey: pubKey,
-      counter: passkey.counter ?? 0,
-    },
-  });
+  let verification;
+  try {
+    verification = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge,
+      expectedOrigin: ORIGIN,
+      expectedRPID: RP_ID,
+      credential: {
+        id: passkey.id,
+        publicKey: pubKey,
+        counter: passkey.counter ?? 0,
+      },
+    });
+  } catch (err) {
+    logFailure(`Signature verification failed: ${err.message}`);
+    return res.status(400).json({ error: 'Signature verification failed' });
+  }
 
   if (verification.verified) {
     const { authenticationInfo } = verification;
+    const previousCounter = passkey.counter ?? 0;
     passkey.counter = authenticationInfo.newCounter;
 
+    const counterNote = previousCounter === 0 && authenticationInfo.newCounter === 0
+      ? ' (authenticator does not use a signature counter, common for synced passkeys)'
+      : '';
+    const { credentialDeviceType } = authenticationInfo;
+
     logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`, C.login);
-    console.log(`  ├── Total Network Payload Received: ${payloadSizeBytes} bytes`);
-    console.log(`${C.success}  └── [SUCCESS] User "${passkey.username}" authenticated via Public Key Cryptography${C.reset}`);
+    logDetail('Verification Result:');
+    logTree([
+      ['Total Network Payload Received', `${payloadSizeBytes} bytes`],
+      ['Verified Origin / RP ID', `${authenticationInfo.origin} / ${authenticationInfo.rpID}`],
+      ['User Verified (UV flag)', authenticationInfo.userVerified ? 'yes' : 'no', true],
+      ['Credential Device Type', `${credentialDeviceType}${credentialDeviceType === 'multiDevice' ? ' (can be synced/backed up)' : ''}`, true],
+      ['Backed Up', authenticationInfo.credentialBackedUp ? 'yes' : 'no', true],
+      ['Signature Counter', `${previousCounter} → ${authenticationInfo.newCounter}${counterNote}`, true],
+    ], `${C.success}[SUCCESS] User "${passkey.username}" authenticated via Public Key Cryptography${C.reset}`);
 
     return res.json({
       status: 'ok',
@@ -183,19 +321,21 @@ app.post('/api/login-finish', async (req, res) => {
         username: passkey.username,
         authMethod: response.type,
         totalPayloadBytes: payloadSizeBytes,
-        verifiedRPID: authenticationInfo.rpID || RP_ID,
-        verifiedOrigin: authenticationInfo.origin || ORIGIN,
-        phishingProtected: verification.verified
+        verifiedRPID: authenticationInfo.rpID,
+        verifiedOrigin: authenticationInfo.origin,
+        // The library only reports success if the signed origin and RP ID matched what we expect
+        phishingProtected: authenticationInfo.origin === ORIGIN && authenticationInfo.rpID === RP_ID
       }
     });
   }
 
+  logFailure('Signature could not be verified.');
   res.status(400).json({ error: 'Signature verification failed' });
 });
 
 app.listen(3000, () => {
   console.clear();
   console.log(`${C.border}${line}${C.reset}`);
-  console.log(`${C.success} PASSKEY DEMO RUNNING AT http://localhost:3000${C.reset}`);
+  console.log(`${C.success} PASSKEY DEMO RUNNING AT http://localhost:3000${VERBOSE ? ' (verbose logging)' : ''}${C.reset}`);
   console.log(`${C.border}${line}${C.reset}\n`);
 });

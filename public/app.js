@@ -43,7 +43,7 @@ async function registerPasskey() {
     const { options } = await startRes.json();
 
     setStatus('Prompting hardware authenticator / password manager...', 'info');
-    const attResp = await startRegistration(options);
+    const attResp = await startRegistration({ optionsJSON: options });
 
     setStatus('Sending attestation to server for verification...', 'info');
     const finishRes = await fetch('/api/register-finish', {
@@ -73,7 +73,7 @@ async function loginPasskey(useAutofill = false) {
 
     if (!useAutofill) setStatus('Prompting Passkey selection...', 'info');
 
-    const asseResp = await startAuthentication(options, useAutofill);
+    const asseResp = await startAuthentication({ optionsJSON: options, useBrowserAutofill: useAutofill });
 
     setStatus('Verifying signature on server...', 'info');
     const finishRes = await fetch('/api/login-finish', {
