@@ -1,5 +1,8 @@
 const { startRegistration, startAuthentication, browserSupportsWebAuthnAutofill } = SimpleWebAuthnBrowser;
 
+// Conditional UI (passkey autofill) is opt-in: open http://localhost:3000/?autofill
+const AUTOFILL_ENABLED = new URLSearchParams(window.location.search).has('autofill');
+
 function setStatus(text, type = 'info') {
   const statusEl = document.getElementById('status');
   statusEl.style.display = 'block';
@@ -21,15 +24,8 @@ function showDashboard(userData) {
   const card = document.querySelector('.card');
   card.innerHTML = `
     <div style="text-align: center; padding: 1rem 0;">
-      <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
-      <h1 style="color: #16a34a; margin-bottom: 0.5rem;">Authenticated!</h1>
+      <h1 style="color: #16a34a; margin-bottom: 0.5rem;">Authenticated</h1>
       <p style="color: #475569; font-size: 1rem;">Welcome, <strong style="color: #0f172a;">${escapeHtml(userData.username)}</strong>.</p>
-
-      <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin: 1.5rem 0; text-align: left; font-size: 0.85rem; border: 1px solid #e2e8f0;">
-        <p style="margin: 0 0 0.5rem 0; color: #0284c7; font-weight: bold;">Server Verified Session Data:</p>
-        <p style="margin: 0.25rem 0; color: #334155;">✓ Credential Type: <strong>${escapeHtml(userData.authMethod)}</strong></p>
-        <p style="margin: 0.25rem 0; color: #334155;">✓ Phishing Protection: <strong>${userData.phishingProtected ? 'ACTIVE' : 'INACTIVE'} (${escapeHtml(userData.verifiedRPID)})</strong></p>
-      </div>
 
       <button class="btn btn-secondary" onclick="window.location.reload()">Sign Out</button>
     </div>
@@ -100,13 +96,19 @@ async function loginPasskey(useAutofill = false) {
       setStatus('❌ Authentication failed.', 'error');
     }
   } catch (err) {
+    // In autofill mode the request is a silent background one, so don't show errors for it
     if (!useAutofill) setStatus(`❌ Error: ${err.message || 'Cancelled'}`, 'error');
   }
 }
 
-// Start Conditional UI (Autofill overlay) on load
-window.addEventListener('DOMContentLoaded', async () => {
-  if (await browserSupportsWebAuthnAutofill()) {
-    loginPasskey(true);
-  }
-});
+// Start Conditional UI (passkey suggestions in the username field) on load, only with ?autofill
+if (AUTOFILL_ENABLED) {
+  window.addEventListener('DOMContentLoaded', async () => {
+    // The "webauthn" token is what lets the browser offer passkeys in this field
+    document.getElementById('username').setAttribute('autocomplete', 'username webauthn');
+
+    if (await browserSupportsWebAuthnAutofill()) {
+      loginPasskey(true);
+    }
+  });
+}

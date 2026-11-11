@@ -72,7 +72,7 @@ const matchLabel = (actual, expected) => (actual === expected ? 'MATCHED ✓' : 
 // --- 1. REGISTRATION START ---
 app.post('/api/register-start', async (req, res) => {
   const { username } = req.body;
-  logHeader(1, `[REGISTER] INITIATING PASSKEY REGISTRATION FOR USER: "${username}"`, C.register);
+  logHeader('1–2', `[REGISTER] INITIATE REGISTRATION → CREATION OPTIONS FOR USER: "${username}"`, C.register);
 
   if (!users[username]) {
     users[username] = { id: username, passkeys: [] };
@@ -95,18 +95,18 @@ app.post('/api/register-start', async (req, res) => {
 
   const selection = options.authenticatorSelection ?? {};
 
-  logDetail('Generated Public Key Creation Options:');
+  logDetail('Creation Options sent to the browser:');
   logTree([
     ['Cryptographic Challenge (Random Nonce)', options.challenge],
     ['Relying Party ID (Origin Domain)', options.rp.id],
     ['Relying Party Name', options.rp.name, true],
     ['User', `${options.user.name} (user handle, base64url: ${options.user.id})`, true],
     ['Accepted Key Algorithms', options.pubKeyCredParams.map(({ alg }) => COSEALG[alg] ?? `COSE ${alg}`).join(', '), true],
-    ['Resident Key Requirement', `${selection.residentKey ?? 'not set'} (enables username-less login)`],
+    ['Resident Key Requirement', `${selection.residentKey ?? 'not set'} (enables username-less login)`, true],
     ['User Verification', selection.userVerification ?? 'not set', true],
     ['Attestation Requested', options.attestation, true],
     ['Timeout', `${options.timeout} ms`, true],
-  ], VERBOSE ? "Challenge stored, waiting for the client's response (STEP 2)…" : null);
+  ], VERBOSE ? "Challenge stored, waiting for the client's response (STEP 5)…" : null);
 
   res.json({ options });
 });
@@ -114,7 +114,7 @@ app.post('/api/register-start', async (req, res) => {
 // --- 2. REGISTRATION FINISH ---
 app.post('/api/register-finish', async (req, res) => {
   const { username, response } = req.body;
-  logHeader(2, `[REGISTER] VERIFYING REGISTRATION RESPONSE FOR USER: "${username}"`, C.register);
+  logHeader(5, `[REGISTER] REGISTER PUBLIC KEY FOR USER: "${username}"`, C.register);
 
   const user = users[username];
   const expectedChallenge = challenges[username];
@@ -171,7 +171,6 @@ app.post('/api/register-finish', async (req, res) => {
     const discoverable = response.clientExtensionResults?.credProps?.rk;
     const aaguidIsEmpty = /^[0-]+$/.test(aaguid);
 
-    logHeader(3, `[REGISTER] REGISTRATION SUCCESSFUL - PUBLIC KEY STORED`, C.register);
     logDetail('Stored Credential:');
     const publicKeyB64 = Buffer.from(credential.publicKey).toString('base64url');
 
@@ -201,7 +200,7 @@ app.post('/api/register-finish', async (req, res) => {
 
 // --- 3. LOGIN START (USERNAME-LESS / DISCOVERABLE) ---
 app.post('/api/login-start', async (req, res) => {
-  logHeader(1, `[LOGIN] INITIATING AUTHENTICATION REQUEST`, C.login);
+  logHeader('1–2', `[LOGIN] INITIATE LOGIN → REQUEST OPTIONS`, C.login);
 
   const options = await generateAuthenticationOptions({
     rpID: RP_ID,
@@ -212,17 +211,17 @@ app.post('/api/login-start', async (req, res) => {
 
   const allowed = options.allowCredentials?.length ?? 0;
 
-  logDetail('Generated Authentication Request Options:');
+  logDetail('Request Options sent to the browser:');
   logTree([
     ['Cryptographic Challenge', options.challenge],
     ['Relying Party ID', options.rpId, true],
     ['User Verification', options.userVerification, true],
     ['Allowed Credentials', allowed === 0
       ? '[EMPTY] (Requesting authenticator to list local passkeys)'
-      : `${allowed} credential(s) listed`],
+      : `${allowed} credential(s) listed`, true],
     ['Timeout', `${options.timeout} ms`, true],
     ['Passkeys Registered on This Server', Object.keys(passkeyStore).length, true],
-  ], VERBOSE ? "Challenge stored, waiting for the client's signed response (STEP 2)…" : null);
+  ], VERBOSE ? "Challenge stored, waiting for the client's signed response (STEP 5)…" : null);
 
   res.json({ options });
 });
@@ -230,7 +229,7 @@ app.post('/api/login-start', async (req, res) => {
 // --- 4. LOGIN FINISH ---
 app.post('/api/login-finish', async (req, res) => {
   const { response } = req.body;
-  logHeader(2, `[LOGIN] VERIFYING SIGNATURE FROM CREDENTIAL ID: ${response?.id}`, C.login);
+  logHeader(5, `[LOGIN] VERIFY ASSERTION RESPONSE (CREDENTIAL ID: ${response?.id})`, C.login);
 
   if (!response?.id) {
     logFailure('Request did not contain an authentication response.');
@@ -312,7 +311,6 @@ app.post('/api/login-finish', async (req, res) => {
     // Real value: algorithm read from the stored public key
     const signatureAlg = decodeCredentialPublicKey(pubKey).get(cose.COSEKEYS.alg);
 
-    logHeader(3, `[LOGIN] CRYPTOGRAPHIC VERIFICATION SUCCESSFUL`, C.login);
     logDetail('Verification Result:');
     logTree([
       ['Signature', `VALID ✓ (${COSEALG[signatureAlg] ?? `COSE ${signatureAlg}`}, verified with the stored public key)`],
@@ -329,7 +327,6 @@ app.post('/api/login-finish', async (req, res) => {
       user: {
         username: passkey.username,
         authMethod: response.type,
-
         verifiedRPID: authenticationInfo.rpID,
         verifiedOrigin: authenticationInfo.origin,
         // The library only reports success if the signed origin and RP ID matched what we expect
